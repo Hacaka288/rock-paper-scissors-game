@@ -6,10 +6,15 @@ const { v4: uuidv4 } = require('uuid');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+    cors: {
+        origin: process.env.NODE_ENV === 'production' ? false : "*",
+        methods: ["GET", "POST"]
+    }
+});
 
 // Serve static files from public directory
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Store active games
 const activeGames = new Map();
@@ -270,7 +275,13 @@ io.on('connection', (socket) => {
     });
 });
 
+// Basic error handling
+app.use((err, req, res, next) => {
+    console.error(err.stack);
+    res.status(500).send('Something broke!');
+});
+
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on port ${PORT}`);
 });
