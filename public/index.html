@@ -1,0 +1,91 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multiplayer Rock Paper Scissors</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Home Screen -->
+        <div id="homeScreen" class="screen active">
+            <h1>Multiplayer Rock Paper Scissors</h1>
+            <div class="button-container">
+                <button id="createGameBtn" class="btn primary">Play with Friends</button>
+                <button id="joinRandomBtn" class="btn secondary">Play with Strangers</button>
+            </div>
+            <div id="joinGameForm">
+                <input type="text" id="roomCodeInput" placeholder="Enter Room Code" maxlength="6">
+                <button id="joinGameBtn" class="btn">Join Game</button>
+            </div>
+            <div class="rules">
+                <h2>How to Play</h2>
+                <p>1. Choose to play with friends or strangers</p>
+                <p>2. For friends: Share the room code or enter a friend's code</p>
+                <p>3. Make your choice when the game begins</p>
+                <p>First to win the most rounds!</p>
+            </div>
+        </div>
+
+        <!-- Waiting Screen -->
+        <div id="waitingScreen" class="screen">
+            <h2>Waiting for Opponent</h2>
+            <div class="loader"></div>
+            <p id="roomCodeDisplay"></p>
+            <button id="cancelWaitingBtn" class="btn">Cancel</button>
+        </div>
+
+        <!-- Game Screen -->
+        <div id="gameScreen" class="screen">
+            <div class="game-header">
+                <div id="roundDisplay" class="round-display"></div>
+                <div class="score-container">
+                    <div class="score player">You: <span id="playerScore">0</span></div>
+                    <div class="score opponent">Opponent: <span id="opponentScore">0</span></div>
+                </div>
+            </div>
+
+            <div class="timer-container">
+                <div class="timer-wrapper">
+                    <div id="timerBar" class="timer-bar"></div>
+                </div>
+                <div id="timerDisplay" class="timer-display">10</div>
+            </div>
+
+            <div class="game-area">
+                <div class="choices">
+                    <button class="choice-btn" data-choice="rock">✊</button>
+                    <button class="choice-btn" data-choice="paper">✋</button>
+                    <button class="choice-btn" data-choice="scissors">✌️</button>
+                </div>
+                <div id="result" class="result-display"></div>
+                <div class="moves-display">
+                    <div class="move-container">
+                        <div class="move-label">Your Move</div>
+                        <div id="playerMove" class="move"></div>
+                    </div>
+                    <div class="move-container">
+                        <div class="move-label">Opponent's Move</div>
+                        <div id="opponentMove" class="move"></div>
+                    </div>
+                </div>
+                <div id="matchControls" class="match-controls" style="display: none;"></div>
+            </div>
+
+            <div class="chat-container">
+                <div id="chatMessages" class="chat-messages"></div>
+                <div class="chat-input">
+                    <input type="text" id="messageInput" placeholder="Type a message...">
+                    <button id="sendMessageBtn">Send</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="game.js"></script>
+</body>
+</html>
