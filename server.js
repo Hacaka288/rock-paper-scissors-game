@@ -166,7 +166,9 @@ function determineWinner(move1, move2) {
 function cleanupGame(roomCode) {
     const game = activeGames.get(roomCode);
     if (game) {
+        // Clear any active timers
         clearGameTimers(game);
+        // Remove the game from active games
         activeGames.delete(roomCode);
     }
 }
@@ -254,9 +256,15 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => {
+        console.log('User disconnected:', socket.id);
         for (const [roomCode, game] of activeGames.entries()) {
-            if (game.players.some(p => p.id === socket.id)) {
-                io.to(roomCode).emit('playerDisconnected');
+            const playerIndex = game.players.findIndex(p => p.id === socket.id);
+            if (playerIndex !== -1) {
+                // Clear any active timers first
+                clearGameTimers(game);
+                // Notify other player in the room
+                socket.to(roomCode).emit('playerDisconnected', { during: game.state });
+                console.log('Emitting playerDisconnected to room:', roomCode);
                 cleanupGame(roomCode);
                 break;
             }
@@ -264,6 +272,11 @@ io.on('connection', (socket) => {
     });
 
     socket.on('leaveRoom', (roomCode) => {
+        const game = activeGames.get(roomCode);
+        console.log('Player leaving room:', socket.id, roomCode);
+        if (game) {
+            socket.to(roomCode).emit('playerDisconnected', { during: game.state });
+        }
         cleanupGame(roomCode);
     });
 

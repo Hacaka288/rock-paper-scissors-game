@@ -162,6 +162,97 @@ function showMatchControls(isRematchRequested = false) {
     });
 }
 
+function handlePlayerLeave() {
+    if (currentRoom) {
+        socket.emit('leaveRoom', currentRoom);
+        displayDisconnectMessage();
+    }
+}
+
+function displayDisconnectMessage() {
+    clearTimers(); // Clear any active timers first
+    
+    // Remove any existing notifications
+    const existingOverlay = document.querySelector('.disconnect-overlay');
+    const existingBox = document.querySelector('.disconnect-box');
+    if (existingOverlay) existingOverlay.remove();
+    if (existingBox) existingBox.remove();
+
+    // Create elements
+    const overlay = document.createElement('div');
+    overlay.className = 'disconnect-overlay';
+    overlay.style.position = 'fixed';
+    overlay.style.top = '0';
+    overlay.style.left = '0';
+    overlay.style.width = '100%';
+    overlay.style.height = '100%';
+    overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+    overlay.style.zIndex = '9998';
+
+    const messageBox = document.createElement('div');
+    messageBox.className = 'disconnect-box';
+    messageBox.style.position = 'fixed';
+    messageBox.style.top = '50%';
+    messageBox.style.left = '50%';
+    messageBox.style.transform = 'translate(-50%, -50%)';
+    messageBox.style.backgroundColor = 'white';
+    messageBox.style.padding = '2rem';
+    messageBox.style.borderRadius = '12px';
+    messageBox.style.textAlign = 'center';
+    messageBox.style.zIndex = '9999';
+    messageBox.style.minWidth = '300px';
+    messageBox.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)';
+
+    messageBox.innerHTML = `
+        <h2 style="color: #e84393; margin-bottom: 1rem; font-size: 1.5rem;">Game Ended</h2>
+        <p style="margin-bottom: 1.5rem; color: #2d3436;">Your opponent has left the match</p>
+        <button id="closeDisconnectMsg" style="
+            background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+            color: white;
+            border: none;
+            padding: 1rem 2rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            width: 100%;
+            transition: transform 0.2s ease;
+        ">Return to Menu</button>
+    `;
+
+    // Add to document
+    document.body.appendChild(overlay);
+    document.body.appendChild(messageBox);
+
+    // Disable all game controls
+    elements.choiceButtons.forEach(btn => btn.disabled = true);
+    if (elements.messageInput) elements.messageInput.disabled = true;
+    if (elements.sendMessageBtn) elements.sendMessageBtn.disabled = true;
+
+    // Handle close button
+    const closeBtn = document.getElementById('closeDisconnectMsg');
+    closeBtn.onclick = () => {
+        overlay.remove();
+        messageBox.remove();
+        resetGame();
+        showScreen('home');
+    };
+
+    closeBtn.onmouseover = () => {
+        closeBtn.style.transform = 'translateY(-2px)';
+    };
+
+    closeBtn.onmouseout = () => {
+        closeBtn.style.transform = 'translateY(0)';
+    };
+}
+
+function handlePlayerLeave() {
+    if (currentRoom) {
+        socket.emit('leaveRoom', currentRoom);
+        displayDisconnectMessage();
+    }
+}
+
 // Event Listeners
 elements.createGameBtn.addEventListener('click', () => {
     socket.emit('createGame');
@@ -305,11 +396,24 @@ socket.on('chat', ({ message, senderId }) => {
     addChatMessage(message, senderId === playerId);
 });
 
-socket.on('playerDisconnected', () => {
-    alert('Opponent disconnected!');
-    socket.emit('leaveRoom', currentRoom);
-    showScreen('home');
-    resetGame();
+socket.on('playerDisconnected', (data) => {
+    console.log('Received playerDisconnected event', data);
+    if (currentRoom) {
+        // Clear all timers and game state
+        clearTimers();
+        
+        // Disable all game controls immediately
+        elements.choiceButtons.forEach(btn => btn.disabled = true);
+        if (elements.messageInput) elements.messageInput.disabled = true;
+        if (elements.sendMessageBtn) elements.sendMessageBtn.disabled = true;
+
+        // Show disconnect message
+        displayDisconnectMessage();
+        
+        // Clean up the room
+        socket.emit('leaveRoom', currentRoom);
+        currentRoom = null;
+    }
 });
 
 socket.on('error', (message) => {
@@ -320,9 +424,7 @@ socket.on('error', (message) => {
 // Handle page visibility change to prevent game state inconsistencies
 document.addEventListener('visibilitychange', () => {
     if (document.hidden && currentRoom) {
-        socket.emit('leaveRoom', currentRoom);
-        showScreen('home');
-        resetGame();
+        handlePlayerLeave();
     }
 });
 

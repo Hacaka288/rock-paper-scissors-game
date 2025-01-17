@@ -1,10 +1,11 @@
 :root {
-    --primary-color: #4a90e2;
-    --secondary-color: #e74c3c;
-    --background-color: #f5f6fa;
-    --text-color: #2c3e50;
-    --border-radius: 8px;
+    --primary-color: #6c5ce7;
+    --secondary-color: #e84393;
+    --background-color: #f8f9fe;
+    --text-color: #2d3436;
+    --border-radius: 12px;
     --transition-speed: 0.3s;
+    --box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
 }
 
 * {
@@ -15,9 +16,10 @@
 
 body {
     font-family: 'Poppins', sans-serif;
-    background-color: var(--background-color);
+    background: linear-gradient(135deg, var(--background-color), #fff);
     color: var(--text-color);
     line-height: 1.6;
+    min-height: 100vh;
 }
 
 .container {
@@ -25,6 +27,12 @@ body {
     margin: 0 auto;
     padding: 2rem;
     min-height: 100vh;
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 .screen {
@@ -37,41 +45,50 @@ body {
 }
 
 h1 {
-    font-size: 2.5rem;
+    font-size: 3rem;
     margin-bottom: 2rem;
     color: var(--primary-color);
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+    animation: slideDown 0.5s ease-out;
+}
+
+@keyframes slideDown {
+    from { transform: translateY(-50px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
 }
 
 .button-container {
     display: flex;
     flex-direction: column;
-    gap: 1rem;
+    gap: 1.2rem;
     max-width: 400px;
-    margin: 0 auto;
+    margin: 2rem auto;
 }
 
 .btn {
-    padding: 1rem 2rem;
+    padding: 1.2rem 2.5rem;
     border: none;
     border-radius: var(--border-radius);
-    font-size: 1.1rem;
+    font-size: 1.2rem;
+    font-weight: 600;
     cursor: pointer;
-    transition: transform var(--transition-speed), box-shadow var(--transition-speed);
+    transition: all var(--transition-speed);
+    background: linear-gradient(135deg, var(--primary-color), #a29bfe);
+    color: white;
+    box-shadow: var(--box-shadow);
 }
 
 .btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    transform: translateY(-3px) scale(1.02);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
 }
 
 .btn.primary {
-    background-color: var(--primary-color);
-    color: white;
+    background: linear-gradient(135deg, var(--primary-color), #a29bfe);
 }
 
 .btn.secondary {
-    background-color: var(--secondary-color);
-    color: white;
+    background: linear-gradient(135deg, var(--secondary-color), #fd79a8);
 }
 
 .rules {
@@ -79,7 +96,7 @@ h1 {
     padding: 2rem;
     background-color: white;
     border-radius: var(--border-radius);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--box-shadow);
 }
 
 .rules h2 {
@@ -103,66 +120,84 @@ h1 {
 }
 
 .choice-btn {
-    font-size: 2rem;
-    padding: 1rem;
+    font-size: 3rem;
+    padding: 1.5rem;
     margin: 0.5rem;
-    border: 2px solid #ddd;
-    border-radius: 8px;
-    background-color: white;
+    border: none;
+    border-radius: 50%;
+    background: white;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.3s ease;
+    box-shadow: var(--box-shadow);
+    width: 100px;
+    height: 100px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .choice-btn:hover:not(:disabled) {
-    transform: scale(1.1);
-    border-color: #4CAF50;
+    transform: translateY(-5px) scale(1.1);
+    box-shadow: 0 15px 45px rgba(0, 0, 0, 0.15);
 }
 
 .choice-btn:disabled {
-    opacity: 0.6;
+    opacity: 0.5;
     cursor: not-allowed;
+    transform: scale(0.95);
 }
 
 .choice-btn.selected {
-    border-color: #2196F3;
-    background-color: rgba(33, 150, 243, 0.1);
+    background: linear-gradient(135deg, var(--primary-color), #a29bfe);
+    color: white;
 }
 
 .choice-btn.winner {
-    border-color: #4CAF50;
-    background-color: rgba(76, 175, 80, 0.1);
+    background: linear-gradient(135deg, #00b894, #55efc4);
+    color: white;
+    animation: winner 0.5s ease-in-out;
 }
 
 .choice-btn.loser {
-    border-color: #f44336;
-    background-color: rgba(244, 67, 54, 0.1);
+    background: linear-gradient(135deg, #d63031, #ff7675);
+    color: white;
+    animation: loser 0.5s ease-in-out;
+}
+
+@keyframes winner {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.2); }
+    100% { transform: scale(1); }
+}
+
+@keyframes loser {
+    0% { transform: scale(1); }
+    25% { transform: translateX(-5px); }
+    75% { transform: translateX(5px); }
+    100% { transform: scale(1); }
 }
 
 .score-container {
     display: flex;
     justify-content: center;
-    gap: 2rem;
-    font-size: 1.2rem;
-    margin-bottom: 2rem;
+    gap: 3rem;
+    font-size: 1.4rem;
+    font-weight: 600;
+    margin: 2rem 0;
+    padding: 1rem;
+    background: white;
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
 }
 
 .result-display {
-    font-size: 1.5rem;
+    font-size: 1.8rem;
     font-weight: bold;
     text-align: center;
-    margin: 1rem 0;
-    padding: 0.5rem;
-    border-radius: 4px;
-}
-
-.result-display.winner {
-    color: #4CAF50;
-    background-color: rgba(76, 175, 80, 0.1);
-}
-
-.result-display.loser {
-    color: #f44336;
-    background-color: rgba(244, 67, 54, 0.1);
+    margin: 1.5rem 0;
+    padding: 1rem;
+    border-radius: var(--border-radius);
+    animation: fadeIn 0.5s ease-in-out;
 }
 
 .moves-display {
@@ -182,27 +217,54 @@ h1 {
     margin: 2rem auto;
     background: white;
     border-radius: var(--border-radius);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--box-shadow);
+    overflow: hidden;
 }
 
 .chat-messages {
-    height: 200px;
+    height: 250px;
     overflow-y: auto;
-    padding: 1rem;
-    border-bottom: 1px solid #eee;
+    padding: 1.5rem;
+    border-bottom: 2px solid #eee;
+    scroll-behavior: smooth;
 }
 
 .chat-input {
     display: flex;
     padding: 1rem;
+    gap: 1rem;
+    background: #f8f9fe;
 }
 
 .chat-input input {
     flex: 1;
-    padding: 0.5rem;
-    border: 1px solid #ddd;
+    padding: 0.8rem 1.2rem;
+    border: 2px solid #eee;
     border-radius: var(--border-radius);
-    margin-right: 0.5rem;
+    font-size: 1rem;
+    transition: all var(--transition-speed);
+}
+
+.chat-input input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.1);
+}
+
+.chat-input button {
+    padding: 0.8rem 1.5rem;
+    border: none;
+    border-radius: var(--border-radius);
+    background: var(--primary-color);
+    color: white;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition-speed);
+}
+
+.chat-input button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(108, 92, 231, 0.2);
 }
 
 .loader {
@@ -226,7 +288,24 @@ h1 {
 }
 
 #joinGameForm {
-    margin: 2rem 0;
+    margin-top: 3rem;
+    padding: 1rem;
+}
+
+@media screen and (max-width: 768px) {
+    #joinGameForm {
+        margin-top: 4rem;
+        padding: 1.5rem;
+    }
+    
+    #joinGameForm input {
+        width: 100%;
+        margin-bottom: 1rem;
+    }
+    
+    #joinGameForm button {
+        width: 100%;
+    }
 }
 
 #roomCodeInput {
@@ -306,6 +385,75 @@ h1 {
 
 .winner {
     animation: pulse 0.5s ease-in-out;
+}
+
+.notification-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+    z-index: 9998;
+    display: block;
+}
+
+.notification {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: white;
+    padding: 2rem;
+    border-radius: var(--border-radius);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    text-align: center;
+    z-index: 9999;
+    min-width: 300px;
+    max-width: 90%;
+}
+
+.notification h2 {
+    color: var(--secondary-color);
+    margin-bottom: 1rem;
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+.notification p {
+    margin-bottom: 1.5rem;
+    color: var(--text-color);
+    font-size: 1.1rem;
+}
+
+.notification button {
+    padding: 1rem 2rem;
+    background: linear-gradient(135deg, var(--primary-color), #a29bfe);
+    color: white;
+    border: none;
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    font-weight: 600;
+    transition: all var(--transition-speed);
+    font-size: 1.1rem;
+    width: 100%;
+}
+
+.notification button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(108, 92, 231, 0.2);
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -60%);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, -50%);
+    }
 }
 
 /* Responsive Design */
