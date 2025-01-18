@@ -213,9 +213,9 @@ h1 {
 }
 
 .chat-container {
+    background: white;
     max-width: 600px;
     margin: 2rem auto;
-    background: white;
     border-radius: var(--border-radius);
     box-shadow: var(--box-shadow);
     overflow: hidden;
@@ -227,6 +227,59 @@ h1 {
     padding: 1.5rem;
     border-bottom: 2px solid #eee;
     scroll-behavior: smooth;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.chat-messages::-webkit-scrollbar {
+    width: 6px;
+}
+
+.chat-messages::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb {
+    background: #ddd;
+    border-radius: 3px;
+}
+
+.chat-message {
+    max-width: 80%;
+    padding: 0.6rem 0.8rem;
+    border-radius: 18px;
+    font-size: 0.9rem;
+    line-height: 1.3;
+    word-wrap: break-word;
+    position: relative;
+    animation: messageSlide 0.3s ease-out;
+}
+
+@keyframes messageSlide {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.chat-message.player {
+    align-self: flex-end;
+    background: var(--primary-color);
+    color: white;
+    border-bottom-right-radius: 4px;
+}
+
+.chat-message.opponent {
+    align-self: flex-start;
+    background: #f0f0f0;
+    color: #333;
+    border-bottom-left-radius: 4px;
 }
 
 .chat-input {
@@ -372,19 +425,51 @@ h1 {
 
 .match-controls {
     display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-top: 2rem;
+    position: relative;
+}
+
+.match-buttons {
+    display: flex;
     gap: 1rem;
     justify-content: center;
-    margin-top: 2rem;
+    margin-top: 1rem;
+}
+
+.rematch-timer {
+    position: absolute;
+    top: -30px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: var(--text-color);
+    background: white;
+    padding: 0.5rem 1rem;
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    min-width: 50px;
+    text-align: center;
+}
+
+.rematch-timer.warning {
+    color: #e74c3c;
+    animation: pulse 0.5s infinite;
+}
+
+.waiting-text {
+    color: var(--text-color);
+    font-size: 1rem;
+    opacity: 0.8;
+    margin: 0.5rem 0;
 }
 
 @keyframes pulse {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.05); }
-    100% { transform: scale(1); }
-}
-
-.winner {
-    animation: pulse 0.5s ease-in-out;
+    0% { transform: scale(1) translateX(-50%); }
+    50% { transform: scale(1.1) translateX(-45%); }
+    100% { transform: scale(1) translateX(-50%); }
 }
 
 .notification-overlay {

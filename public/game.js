@@ -1,18 +1,162 @@
-// Connect to Socket.IO server
-const socket = io(window.location.origin, {
-    transports: ['websocket', 'polling']
-});
+// Initialize socket variable but don't connect immediately
+let socket = null;
+let gameMode = null; // 'friends' or 'random'
+
+// Function to initialize socket connection
+function initializeSocket() {
+    if (!socket) {
+        socket = io(window.location.origin, {
+            transports: ['websocket', 'polling']
+        });
+        
+        // Set up socket event handlers
+        socket.on('connect', () => {
+            playerId = socket.id;
+            console.log('Connected with ID:', playerId);
+        });
+
+        // Move all socket.on handlers here
+        socket.on('gameCreated', (roomCode) => {
+            currentRoom = roomCode;
+            elements.roomCodeDisplay.textContent = `Room Code: ${roomCode}`;
+            elements.roomCodeDisplay.style.display = 'block';
+            showScreen('waiting');
+        });
+
+        socket.on('playerJoined', () => {
+            elements.roomCodeDisplay.style.display = 'none';
+            showScreen('game');
+            resetRound();
+        });
+
+        socket.on('waiting', () => {
+            if (gameMode === 'random') {
+                elements.roomCodeDisplay.textContent = 'Finding a random opponent...';
+            }
+            showScreen('waiting');
+        });
+
+        socket.on('gameStart', (roomCode) => {
+            currentRoom = roomCode;
+            elements.roomCodeDisplay.style.display = 'none';
+            showScreen('game');
+            resetRound();
+        });
+
+        socket.on('roundStart', ({ round, scores }) => {
+            clearTimers();
+            
+            const opponentScore = scores.find(s => s.id !== playerId).score;
+            const playerScore = scores.find(s => s.id === playerId).score;
+            
+            elements.roundDisplay.textContent = `Round ${round}`;
+            updateScores(playerScore, opponentScore);
+            resetRound();
+            startRoundTimer(10);
+        });
+
+        socket.on('roundResult', ({ moves, result, scores, matchWinner }) => {
+            clearTimers();
+            
+            // Disable moves during round end
+            elements.choiceButtons.forEach(btn => {
+                btn.disabled = true;
+                btn.classList.remove('selected');
+            });
+            
+            const opponentId = Object.keys(moves).find(id => id !== playerId);
+            const playerMove = moves[playerId] || 'none';
+            const opponentMove = moves[opponentId] || 'none';
+            
+            elements.playerMove.textContent = getEmoji(playerMove);
+            elements.opponentMove.textContent = getEmoji(opponentMove);
+            
+            const playerScore = scores.find(s => s.id === playerId).score;
+            const opponentScore = scores.find(s => s.id !== playerId).score;
+            
+            updateScores(playerScore, opponentScore);
+
+            if (result === 'tie') {
+                elements.result.textContent = "It's a tie!";
+            } else if (
+                (result === 'player1' && scores[0].id === playerId) ||
+                (result === 'player2' && scores[1].id === playerId)
+            ) {
+                elements.result.textContent = 'You win this round!';
+                elements.result.classList.add('winner');
+            } else {
+                elements.result.textContent = 'Opponent wins this round!';
+                elements.result.classList.add('loser');
+            }
+
+            if (matchWinner) {
+                const isWinner = matchWinner === playerId;
+                elements.result.textContent = isWinner ? 'You won the match!' : 'You lost the match!';
+                elements.result.className = `result-display ${isWinner ? 'winner' : 'loser'}`;
+                showMatchControls();
+                addChatMessage('Match will end in 15 seconds if no rematch is agreed', false);
+            }
+        });
+
+        socket.on('rematchRequested', ({ requesterId, votes }) => {
+            if (requesterId !== playerId) {
+                addChatMessage('Opponent requested a rematch!', false);
+            }
+            
+            const allVoted = votes.length === 2;
+            if (!allVoted) {
+                showMatchControls(requesterId === playerId);
+            }
+        });
+
+        socket.on('rematchStarting', () => {
+            addChatMessage('Rematch accepted! Starting new game...', false);
+            elements.matchControls.style.display = 'none';
+            resetRound();
+        });
+
+        socket.on('chat', ({ message, senderId }) => {
+            addChatMessage(message, senderId === playerId);
+        });
+
+        socket.on('playerDisconnected', (data) => {
+            console.log('Received playerDisconnected event', data);
+            if (currentRoom) {
+                clearTimers();
+                displayDisconnectMessage();
+            }
+        });
+
+        socket.on('error', (message) => {
+            alert(message);
+            showScreen('home');
+            if (socket) {
+                socket.disconnect();
+                socket = null;
+            }
+        });
+
+        socket.on('matchTimeout', () => {
+            addChatMessage('Match ended - No rematch agreement reached', false);
+            setTimeout(() => {
+                if (socket) {
+                    socket.disconnect();
+                    socket = null;
+                }
+                showScreen('home');
+                elements.roomCodeDisplay.textContent = '';
+                elements.roomCodeInput.value = '';
+                gameMode = null;
+            }, 2000);
+        });
+    }
+}
 
 // Game state
 let currentRoom = null;
 let playerId = null;
 let currentRoundTimer = null;
 let transitionTimer = null;
-
-socket.on('connect', () => {
-    playerId = socket.id;
-    console.log('Connected with ID:', playerId);
-});
 
 // DOM Elements
 const screens = {
@@ -115,14 +259,14 @@ function updateScores(playerScore, opponentScore) {
 }
 
 function resetRound() {
+    elements.result.textContent = '';
+    elements.result.className = 'result-display';
+    elements.playerMove.textContent = '';
+    elements.opponentMove.textContent = '';
     elements.choiceButtons.forEach(btn => {
         btn.disabled = false;
         btn.classList.remove('selected', 'winner', 'loser');
     });
-    elements.playerMove.textContent = '';
-    elements.opponentMove.textContent = '';
-    elements.result.textContent = '';
-    elements.result.className = 'result-display';
 }
 
 function resetGame() {
@@ -140,26 +284,49 @@ function resetGame() {
 }
 
 function showMatchControls(isRematchRequested = false) {
-    elements.matchControls.innerHTML = `
-        <button id="rematchBtn" class="btn primary" ${isRematchRequested ? 'disabled' : ''}>
-            ${isRematchRequested ? 'Rematch Requested...' : 'Request Rematch'}
-        </button>
-        <button id="mainMenuBtn" class="btn secondary">Main Menu</button>
-    `;
-    
-    elements.matchControls.style.display = 'flex';
-    
-    document.getElementById('rematchBtn').addEventListener('click', () => {
-        socket.emit('requestRematch', currentRoom);
-        document.getElementById('rematchBtn').disabled = true;
-        document.getElementById('rematchBtn').textContent = 'Rematch Requested...';
-    });
-    
-    document.getElementById('mainMenuBtn').addEventListener('click', () => {
-        socket.emit('leaveRoom', currentRoom);
+    const controls = elements.matchControls;
+    controls.style.display = 'flex';
+    controls.innerHTML = '';
+
+    // Create buttons container
+    const buttonsContainer = document.createElement('div');
+    buttonsContainer.className = 'match-buttons';
+    controls.appendChild(buttonsContainer);
+
+    if (!isRematchRequested) {
+        const rematchBtn = document.createElement('button');
+        rematchBtn.className = 'btn primary';
+        rematchBtn.textContent = 'Request Rematch';
+        rematchBtn.onclick = () => {
+            socket.emit('requestRematch', currentRoom);
+            rematchBtn.disabled = true;
+            rematchBtn.textContent = 'Rematch Requested';
+        };
+        buttonsContainer.appendChild(rematchBtn);
+    } else {
+        const waitingText = document.createElement('div');
+        waitingText.textContent = 'Waiting for opponent...';
+        waitingText.className = 'waiting-text';
+        buttonsContainer.appendChild(waitingText);
+    }
+
+    // Add main menu button
+    const mainMenuBtn = document.createElement('button');
+    mainMenuBtn.className = 'btn secondary';
+    mainMenuBtn.textContent = 'Main Menu';
+    mainMenuBtn.onclick = () => {
+        if (socket) {
+            socket.emit('leaveRoom', currentRoom);
+            socket.disconnect();
+            socket = null;
+        }
         showScreen('home');
+        elements.roomCodeDisplay.textContent = '';
+        elements.roomCodeInput.value = '';
+        gameMode = null;
         resetGame();
-    });
+    };
+    buttonsContainer.appendChild(mainMenuBtn);
 }
 
 function handlePlayerLeave() {
@@ -246,34 +413,44 @@ function displayDisconnectMessage() {
     };
 }
 
-function handlePlayerLeave() {
-    if (currentRoom) {
-        socket.emit('leaveRoom', currentRoom);
-        displayDisconnectMessage();
-    }
-}
-
 // Event Listeners
 elements.createGameBtn.addEventListener('click', () => {
+    gameMode = 'friends';
+    initializeSocket();
     socket.emit('createGame');
+    elements.roomCodeDisplay.textContent = 'Creating room...';
     showScreen('waiting');
 });
 
 elements.joinRandomBtn.addEventListener('click', () => {
+    gameMode = 'random';
+    initializeSocket();
     socket.emit('joinRandom');
+    elements.roomCodeDisplay.textContent = 'Finding a random opponent...';
     showScreen('waiting');
 });
 
 elements.joinGameBtn.addEventListener('click', () => {
     const roomCode = elements.roomCodeInput.value.toUpperCase().trim();
     if (roomCode) {
+        gameMode = 'friends';
+        initializeSocket();
         socket.emit('joinGame', roomCode);
+    } else {
+        alert('Please enter a valid room code');
     }
 });
 
 elements.cancelWaitingBtn.addEventListener('click', () => {
-    socket.emit('cancelWaiting');
+    if (socket) {
+        socket.emit('cancelWaiting');
+        socket.disconnect();
+        socket = null;
+    }
+    gameMode = null;
     showScreen('home');
+    elements.roomCodeDisplay.textContent = '';
+    elements.roomCodeInput.value = '';
 });
 
 elements.choiceButtons.forEach(button => {
@@ -302,123 +479,6 @@ elements.messageInput.addEventListener('keypress', (e) => {
         e.preventDefault();
         elements.sendMessageBtn.click();
     }
-});
-
-// Socket Event Handlers
-socket.on('gameCreated', (roomCode) => {
-    currentRoom = roomCode;
-    elements.roomCodeDisplay.textContent = `Room Code: ${roomCode}`;
-    showScreen('waiting');
-});
-
-socket.on('playerJoined', () => {
-    showScreen('game');
-    resetRound();
-});
-
-socket.on('waiting', () => {
-    elements.roomCodeDisplay.textContent = 'Finding an opponent...';
-});
-
-socket.on('gameStart', (roomCode) => {
-    currentRoom = roomCode;
-    showScreen('game');
-    resetRound();
-});
-
-socket.on('roundStart', ({ round, scores }) => {
-    clearTimers();
-    
-    const opponentScore = scores.find(s => s.id !== playerId).score;
-    const playerScore = scores.find(s => s.id === playerId).score;
-    
-    elements.roundDisplay.textContent = `Round ${round}`;
-    updateScores(playerScore, opponentScore);
-    resetRound();
-    startRoundTimer(10);
-});
-
-socket.on('roundResult', ({ moves, result, scores, matchWinner }) => {
-    clearTimers();
-    
-    const opponentId = Object.keys(moves).find(id => id !== playerId);
-    const playerMove = moves[playerId] || 'none';
-    const opponentMove = moves[opponentId] || 'none';
-    
-    elements.playerMove.textContent = getEmoji(playerMove);
-    elements.opponentMove.textContent = getEmoji(opponentMove);
-    
-    const playerScore = scores.find(s => s.id === playerId).score;
-    const opponentScore = scores.find(s => s.id !== playerId).score;
-    
-    updateScores(playerScore, opponentScore);
-
-    // Highlight winner
-    if (result === 'tie') {
-        elements.result.textContent = "It's a tie!";
-    } else if (
-        (result === 'player1' && scores[0].id === playerId) ||
-        (result === 'player2' && scores[1].id === playerId)
-    ) {
-        elements.result.textContent = 'You win this round!';
-        elements.result.classList.add('winner');
-    } else {
-        elements.result.textContent = 'Opponent wins this round!';
-        elements.result.classList.add('loser');
-    }
-
-    if (matchWinner) {
-        const isWinner = matchWinner === playerId;
-        elements.result.textContent = isWinner ? 'You won the match!' : 'You lost the match!';
-        elements.result.className = `result-display ${isWinner ? 'winner' : 'loser'}`;
-        showMatchControls();
-    }
-});
-
-socket.on('rematchRequested', ({ requesterId, votes }) => {
-    if (requesterId !== playerId) {
-        addChatMessage('Opponent requested a rematch!', false);
-    }
-    
-    const allVoted = votes.length === 2;
-    if (!allVoted) {
-        showMatchControls(requesterId === playerId);
-    }
-});
-
-socket.on('rematchStarting', () => {
-    addChatMessage('Rematch accepted! Starting new game...', false);
-    elements.matchControls.style.display = 'none';
-    resetRound();
-});
-
-socket.on('chat', ({ message, senderId }) => {
-    addChatMessage(message, senderId === playerId);
-});
-
-socket.on('playerDisconnected', (data) => {
-    console.log('Received playerDisconnected event', data);
-    if (currentRoom) {
-        // Clear all timers and game state
-        clearTimers();
-        
-        // Disable all game controls immediately
-        elements.choiceButtons.forEach(btn => btn.disabled = true);
-        if (elements.messageInput) elements.messageInput.disabled = true;
-        if (elements.sendMessageBtn) elements.sendMessageBtn.disabled = true;
-
-        // Show disconnect message
-        displayDisconnectMessage();
-        
-        // Clean up the room
-        socket.emit('leaveRoom', currentRoom);
-        currentRoom = null;
-    }
-});
-
-socket.on('error', (message) => {
-    alert(message);
-    showScreen('home');
 });
 
 // Handle page visibility change to prevent game state inconsistencies

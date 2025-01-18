@@ -18,9 +18,10 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Store active games
 const activeGames = new Map();
+const randomMatchmaking = new Set();
 
-function createGame(socket1, socket2 = null) {
-    const roomCode = uuidv4().substring(0, 6).toUpperCase();
+function createGame(socket1, socket2 = null, isRandom = false) {
+    const roomCode = isRandom ? 'random-' + uuidv4().substring(0, 6).toUpperCase() : uuidv4().substring(0, 6).toUpperCase();
     socket1.join(roomCode);
 
     const game = {
@@ -30,18 +31,22 @@ function createGame(socket1, socket2 = null) {
         roundTimer: null,
         roundStartTime: null,
         state: 'waiting', // waiting, playing, roundEnd, matchEnd
-        rematchVotes: new Set()
+        rematchVotes: new Set(),
+        rematchTimer: null,
+        isRandom: isRandom
     };
 
     if (socket2) {
         socket2.join(roomCode);
         game.players.push({ id: socket2.id, score: 0, rematchRequested: false });
         game.state = 'playing';
-        startNewRound(roomCode);
+        activeGames.set(roomCode, game);
         io.to(roomCode).emit('gameStart', roomCode);
+        startNewRound(roomCode); // Start the round immediately when both players join
+    } else {
+        activeGames.set(roomCode, game);
     }
 
-    activeGames.set(roomCode, game);
     return roomCode;
 }
 
@@ -71,6 +76,10 @@ function clearGameTimers(game) {
     if (game.roundTimer) {
         clearTimeout(game.roundTimer);
         game.roundTimer = null;
+    }
+    if (game.rematchTimer) {
+        clearTimeout(game.rematchTimer);
+        game.rematchTimer = null;
     }
 }
 
@@ -131,6 +140,14 @@ function processRoundResult(roomCode) {
 
     if (matchResult) {
         game.state = 'matchEnd';
+        // Start 15 second timer for rematch decision
+        game.rematchTimer = setTimeout(() => {
+            const game = activeGames.get(roomCode);
+            if (game && game.state === 'matchEnd' && game.rematchVotes.size < 2) {
+                io.to(roomCode).emit('matchTimeout');
+                cleanupGame(roomCode);
+            }
+        }, 15000);
         return;
     }
 
@@ -177,38 +194,60 @@ io.on('connection', (socket) => {
     console.log('A user connected:', socket.id);
 
     socket.on('createGame', () => {
-        const roomCode = createGame(socket);
+        // Remove from random matchmaking if they were in it
+        randomMatchmaking.delete(socket.id);
+        const roomCode = createGame(socket, null, false);
         socket.emit('gameCreated', roomCode);
     });
 
     socket.on('joinGame', (roomCode) => {
+        // Remove from random matchmaking if they were in it
+        randomMatchmaking.delete(socket.id);
         const game = activeGames.get(roomCode);
-        if (game && game.players.length === 1) {
+        if (game && game.players.length === 1 && !game.isRandom) {
             const createdSocketId = game.players[0].id;
             const createdSocket = io.sockets.sockets.get(createdSocketId);
-            createGame(createdSocket, socket);
+            createGame(createdSocket, socket, false);
         } else {
             socket.emit('error', 'Room not found or full');
         }
     });
 
     socket.on('joinRandom', () => {
-        const availableRoom = Array.from(activeGames.entries()).find(([_, game]) => 
-            game.players.length === 1 && game.state === 'waiting'
-        );
-
-        if (availableRoom) {
-            const [roomCode, game] = availableRoom;
-            const hostSocketId = game.players[0].id;
-            const hostSocket = io.sockets.sockets.get(hostSocketId);
-            createGame(hostSocket, socket);
-        } else {
-            const roomCode = createGame(socket);
-            socket.emit('waiting');
+        // First, check if the player is already in a game
+        for (const [roomCode, game] of activeGames.entries()) {
+            if (game.players.some(p => p.id === socket.id)) {
+                return; // Player is already in a game
+            }
         }
+
+        // Add player to random matchmaking pool
+        randomMatchmaking.add(socket.id);
+
+        // Look for another player in the random matchmaking pool
+        for (const otherId of randomMatchmaking) {
+            if (otherId !== socket.id) {
+                const otherSocket = io.sockets.sockets.get(otherId);
+                if (otherSocket) {
+                    // Remove both players from the pool
+                    randomMatchmaking.delete(socket.id);
+                    randomMatchmaking.delete(otherId);
+                    // Create a random game
+                    createGame(otherSocket, socket, true);
+                    return;
+                }
+            }
+        }
+
+        // If no match found, wait
+        socket.emit('waiting');
     });
 
     socket.on('cancelWaiting', () => {
+        // Remove from random matchmaking pool
+        randomMatchmaking.delete(socket.id);
+        
+        // Check for and cleanup any waiting rooms
         for (const [roomCode, game] of activeGames.entries()) {
             if (game.players.length === 1 && game.players[0].id === socket.id) {
                 cleanupGame(roomCode);
@@ -249,21 +288,28 @@ io.on('connection', (socket) => {
 
         // If all players voted for rematch, start new game
         if (game.rematchVotes.size === 2) {
+            clearGameTimers(game); // Clear the rematch timer
             resetGameState(game);
-            startNewRound(roomCode);
             io.to(roomCode).emit('rematchStarting');
+            startNewRound(roomCode);
         }
     });
 
     socket.on('disconnect', () => {
         console.log('User disconnected:', socket.id);
+        // Remove from random matchmaking if they were in it
+        randomMatchmaking.delete(socket.id);
+        
         for (const [roomCode, game] of activeGames.entries()) {
             const playerIndex = game.players.findIndex(p => p.id === socket.id);
             if (playerIndex !== -1) {
                 // Clear any active timers first
                 clearGameTimers(game);
                 // Notify other player in the room
-                socket.to(roomCode).emit('playerDisconnected', { during: game.state });
+                socket.to(roomCode).emit('playerDisconnected', { 
+                    during: game.state,
+                    disconnectedPlayer: socket.id 
+                });
                 console.log('Emitting playerDisconnected to room:', roomCode);
                 cleanupGame(roomCode);
                 break;
