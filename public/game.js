@@ -1,18 +1,65 @@
 // Initialize socket variable but don't connect immediately
 let socket = null;
 let gameMode = null; // 'friends' or 'random'
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 3;
+let lastGameState = null;
 
 // Function to initialize socket connection
 function initializeSocket() {
     if (!socket) {
         socket = io(window.location.origin, {
-            transports: ['websocket', 'polling']
+            transports: ['websocket', 'polling'],
+            reconnection: true,
+            reconnectionAttempts: MAX_RECONNECT_ATTEMPTS,
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 5000
         });
         
         // Set up socket event handlers
         socket.on('connect', () => {
             playerId = socket.id;
             console.log('Connected with ID:', playerId);
+            reconnectAttempts = 0;
+            
+            // If we were in a game before, try to rejoin
+            if (lastGameState && lastGameState.roomCode) {
+                socket.emit('attemptRejoin', {
+                    roomCode: lastGameState.roomCode,
+                    gameMode: gameMode
+                });
+            }
+        });
+
+        socket.on('connect_error', (error) => {
+            console.log('Connection error:', error);
+            showConnectionStatus('Connection lost. Attempting to reconnect...');
+        });
+
+        socket.on('reconnect_attempt', (attemptNumber) => {
+            reconnectAttempts = attemptNumber;
+            showConnectionStatus(`Reconnecting... Attempt ${attemptNumber}/${MAX_RECONNECT_ATTEMPTS}`);
+        });
+
+        socket.on('reconnect_failed', () => {
+            showConnectionStatus('Unable to reconnect. Please refresh the page.');
+            setTimeout(() => {
+                window.location.reload();
+            }, 3000);
+        });
+
+        // Add new event for rejoining games
+        socket.on('rejoinSuccess', (gameState) => {
+            currentRoom = gameState.roomCode;
+            showScreen('game');
+            updateGameStateFromServer(gameState);
+            addChatMessage('Successfully reconnected to the game!', false);
+        });
+
+        socket.on('rejoinFailed', () => {
+            resetGame();
+            showScreen('home');
+            alert('Could not rejoin the previous game. Starting fresh.');
         });
 
         // Move all socket.on handlers here
@@ -38,12 +85,17 @@ function initializeSocket() {
 
         socket.on('gameStart', (roomCode) => {
             currentRoom = roomCode;
+            lastGameState = { roomCode, gameMode };
             elements.roomCodeDisplay.style.display = 'none';
             showScreen('game');
             resetRound();
         });
 
         socket.on('roundStart', ({ round, scores }) => {
+            if (lastGameState) {
+                lastGameState.currentRound = round;
+                lastGameState.scores = scores;
+            }
             clearTimers();
             
             const opponentScore = scores.find(s => s.id !== playerId).score;
@@ -124,11 +176,13 @@ function initializeSocket() {
             if (currentRoom) {
                 clearTimers();
                 displayDisconnectMessage();
+                resetGame();
             }
         });
 
         socket.on('error', (message) => {
             alert(message);
+            resetGame();
             showScreen('home');
             if (socket) {
                 socket.disconnect();
@@ -139,13 +193,12 @@ function initializeSocket() {
         socket.on('matchTimeout', () => {
             addChatMessage('Match ended - No rematch agreement reached', false);
             setTimeout(() => {
+                resetGame();
                 if (socket) {
                     socket.disconnect();
                     socket = null;
                 }
                 showScreen('home');
-                elements.roomCodeDisplay.textContent = '';
-                elements.roomCodeInput.value = '';
                 gameMode = null;
             }, 2000);
         });
@@ -270,17 +323,30 @@ function resetRound() {
 }
 
 function resetGame() {
-    clearTimers();
+    // Reset all game state
     currentRoom = null;
-    elements.matchControls.style.display = 'none';
-    elements.playerScoreDisplay.textContent = '0';
-    elements.opponentScoreDisplay.textContent = '0';
-    elements.roundDisplay.textContent = '';
+    elements.roomCodeDisplay.textContent = '';
+    elements.roomCodeInput.value = '';
     elements.result.textContent = '';
     elements.result.className = 'result-display';
     elements.playerMove.textContent = '';
     elements.opponentMove.textContent = '';
+    elements.playerScoreDisplay.textContent = '0';
+    elements.opponentScoreDisplay.textContent = '0';
+    elements.roundDisplay.textContent = '';
     elements.chatMessages.innerHTML = '';
+    elements.matchControls.style.display = 'none';
+    elements.timerDisplay.textContent = '';
+    elements.timerBar.style.width = '100%';
+    
+    // Reset all buttons
+    elements.choiceButtons.forEach(btn => {
+        btn.disabled = false;
+        btn.classList.remove('selected', 'winner', 'loser');
+    });
+    
+    // Clear all timers
+    clearTimers();
 }
 
 function showMatchControls(isRematchRequested = false) {
@@ -411,6 +477,50 @@ function displayDisconnectMessage() {
     closeBtn.onmouseout = () => {
         closeBtn.style.transform = 'translateY(0)';
     };
+}
+
+function showConnectionStatus(message) {
+    // Create or update connection status element
+    let statusElement = document.getElementById('connectionStatus');
+    if (!statusElement) {
+        statusElement = document.createElement('div');
+        statusElement.id = 'connectionStatus';
+        document.body.appendChild(statusElement);
+    }
+    statusElement.textContent = message;
+    statusElement.style.display = 'block';
+    
+    // Auto-hide after 5 seconds if it's not an error message
+    if (!message.includes('Unable to reconnect')) {
+        setTimeout(() => {
+            statusElement.style.display = 'none';
+        }, 5000);
+    }
+}
+
+function updateGameStateFromServer(gameState) {
+    // Update scores
+    if (gameState.scores) {
+        const playerScore = gameState.scores.find(s => s.id === playerId)?.score || 0;
+        const opponentScore = gameState.scores.find(s => s.id !== playerId)?.score || 0;
+        updateScores(playerScore, opponentScore);
+    }
+    
+    // Update round display
+    if (gameState.currentRound) {
+        elements.roundDisplay.textContent = `Round ${gameState.currentRound}`;
+    }
+    
+    // Update moves if round is in progress
+    if (gameState.moves) {
+        const opponentId = Object.keys(gameState.moves).find(id => id !== playerId);
+        if (gameState.moves[playerId]) {
+            elements.playerMove.textContent = getEmoji(gameState.moves[playerId]);
+        }
+        if (opponentId && gameState.moves[opponentId]) {
+            elements.opponentMove.textContent = getEmoji(gameState.moves[opponentId]);
+        }
+    }
 }
 
 // Event Listeners

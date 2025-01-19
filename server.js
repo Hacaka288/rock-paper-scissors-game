@@ -16,9 +16,10 @@ const io = new Server(server, {
 // Serve static files from public directory
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Store active games
+// Store active games and disconnected players
 const activeGames = new Map();
 const randomMatchmaking = new Set();
+const disconnectedPlayers = new Map(); // Store disconnected players and their game info
 
 function createGame(socket1, socket2 = null, isRandom = false) {
     const roomCode = isRandom ? 'random-' + uuidv4().substring(0, 6).toUpperCase() : uuidv4().substring(0, 6).toUpperCase();
@@ -185,9 +186,56 @@ function cleanupGame(roomCode) {
     if (game) {
         // Clear any active timers
         clearGameTimers(game);
+        
+        // Remove all players from the room and disconnected players list
+        game.players.forEach(player => {
+            const socket = io.sockets.sockets.get(player.id);
+            if (socket) {
+                socket.leave(roomCode);
+            }
+            disconnectedPlayers.delete(player.id);
+        });
+        
+        // Remove from random matchmaking if it was a random game
+        game.players.forEach(player => {
+            randomMatchmaking.delete(player.id);
+        });
+        
         // Remove the game from active games
         activeGames.delete(roomCode);
     }
+}
+
+function handlePlayerDisconnection(socket) {
+    // Find any game this player is in
+    for (const [roomCode, game] of activeGames.entries()) {
+        const player = game.players.find(p => p.id === socket.id);
+        if (player) {
+            // Store disconnected player info
+            disconnectedPlayers.set(socket.id, {
+                roomCode,
+                gameMode: game.isRandom ? 'random' : 'friends',
+                timestamp: Date.now()
+            });
+
+            // Set a timeout to clean up if player doesn't reconnect
+            setTimeout(() => {
+                if (disconnectedPlayers.has(socket.id)) {
+                    // Player didn't reconnect in time
+                    socket.to(roomCode).emit('playerDisconnected');
+                    cleanupGame(roomCode);
+                    disconnectedPlayers.delete(socket.id);
+                }
+            }, 30000); // 30 seconds timeout
+
+            // Notify other player about temporary disconnection
+            socket.to(roomCode).emit('opponentTemporaryDisconnect');
+            break;
+        }
+    }
+    
+    // Remove from random matchmaking if they were in it
+    randomMatchmaking.delete(socket.id);
 }
 
 io.on('connection', (socket) => {
@@ -297,31 +345,14 @@ io.on('connection', (socket) => {
 
     socket.on('disconnect', () => {
         console.log('User disconnected:', socket.id);
-        // Remove from random matchmaking if they were in it
-        randomMatchmaking.delete(socket.id);
-        
-        for (const [roomCode, game] of activeGames.entries()) {
-            const playerIndex = game.players.findIndex(p => p.id === socket.id);
-            if (playerIndex !== -1) {
-                // Clear any active timers first
-                clearGameTimers(game);
-                // Notify other player in the room
-                socket.to(roomCode).emit('playerDisconnected', { 
-                    during: game.state,
-                    disconnectedPlayer: socket.id 
-                });
-                console.log('Emitting playerDisconnected to room:', roomCode);
-                cleanupGame(roomCode);
-                break;
-            }
-        }
+        handlePlayerDisconnection(socket);
     });
 
     socket.on('leaveRoom', (roomCode) => {
         const game = activeGames.get(roomCode);
         console.log('Player leaving room:', socket.id, roomCode);
         if (game) {
-            socket.to(roomCode).emit('playerDisconnected', { during: game.state });
+            socket.to(roomCode).emit('playerDisconnected');
         }
         cleanupGame(roomCode);
     });
@@ -331,6 +362,36 @@ io.on('connection', (socket) => {
             message: message.slice(0, 200), // Limit message length
             senderId: socket.id 
         });
+    });
+
+    // Handle reconnection attempts
+    socket.on('attemptRejoin', ({ roomCode, gameMode }) => {
+        const disconnectedInfo = disconnectedPlayers.get(socket.id);
+        
+        if (disconnectedInfo && disconnectedInfo.roomCode === roomCode) {
+            const game = activeGames.get(roomCode);
+            if (game) {
+                // Rejoin the room
+                socket.join(roomCode);
+                disconnectedPlayers.delete(socket.id);
+                
+                // Send current game state
+                socket.emit('rejoinSuccess', {
+                    roomCode,
+                    currentRound: game.currentRound,
+                    scores: game.players.map(p => ({ id: p.id, score: p.score })),
+                    moves: game.moves,
+                    state: game.state
+                });
+                
+                // Notify other player
+                socket.to(roomCode).emit('opponentReconnected');
+            } else {
+                socket.emit('rejoinFailed');
+            }
+        } else {
+            socket.emit('rejoinFailed');
+        }
     });
 });
 
